@@ -1,0 +1,226 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ACLF 28-Day Mortality Risk Calculator</title>
+    <style>
+        :root {
+            --primary-color: #2c3e50;
+            --accent-color: #3498db;
+            --danger-color: #e74c3c;
+            --success-color: #27ae60;
+        }
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background-color: #f4f7f6;
+            margin: 0;
+            padding: 20px;
+            display: flex;
+            justify-content: center;
+        }
+        .container {
+            background: white;
+            padding: 30px;
+            border-radius: 12px;
+            box-shadow: 0 4px 20px rgba(0,0,0,0.1);
+            max-width: 500px;
+            width: 100%;
+        }
+        h2 {
+            color: var(--primary-color);
+            text-align: center;
+            margin-bottom: 25px;
+            font-size: 1.5rem;
+        }
+        .input-group {
+            margin-bottom: 15px;
+        }
+        label {
+            display: block;
+            margin-bottom: 5px;
+            font-weight: 600;
+            color: #555;
+            font-size: 0.9rem;
+        }
+        input[type="number"], select {
+            width: 100%;
+            padding: 10px;
+            border: 1px solid #ddd;
+            border-radius: 6px;
+            box-sizing: border-box;
+            font-size: 1rem;
+        }
+        .checkbox-group {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            padding: 10px 0;
+        }
+        button {
+            width: 100%;
+            padding: 15px;
+            background-color: var(--accent-color);
+            color: white;
+            border: none;
+            border-radius: 6px;
+            font-size: 1.1rem;
+            cursor: pointer;
+            transition: background 0.3s;
+            margin-top: 10px;
+        }
+        button:hover {
+            background-color: #2980b9;
+        }
+        #result-container {
+            margin-top: 25px;
+            padding: 20px;
+            border-radius: 8px;
+            text-align: center;
+            display: none;
+        }
+        .risk-value {
+            font-size: 2.5rem;
+            font-weight: bold;
+            display: block;
+        }
+        .risk-label {
+            font-size: 1.1rem;
+            margin-top: 5px;
+        }
+        .footer-note {
+            font-size: 0.8rem;
+            color: #888;
+            margin-top: 20px;
+            text-align: center;
+            line-height: 1.4;
+        }
+    </style>
+</head>
+<body>
+
+<div class="container">
+    <h2>28-Day Mortality Risk Predictor</h2>
+    
+    <div class="input-group">
+        <label>Glasgow Coma Scale (3-15)</label>
+        <input type="number" id="gcs" value="15" step="1">
+    </div>
+
+    <div class="input-group">
+        <label>Age (years)</label>
+        <input type="number" id="age" value="50" step="1">
+    </div>
+
+    <div class="input-group">
+        <label>Mean Arterial Pressure (mmHg)</label>
+        <input type="number" id="map" value="80" step="0.1">
+    </div>
+
+    <div class="input-group">
+        <label>INR</label>
+        <input type="number" id="inr" value="1.0" step="0.01">
+    </div>
+
+    <div class="input-group">
+        <label>Total Bilirubin (mg/dL)</label>
+        <input type="number" id="tb" value="1.0" step="0.1">
+    </div>
+
+    <div class="input-group">
+        <label>Respiratory Rate (bpm)</label>
+        <input type="number" id="res" value="18" step="1">
+    </div>
+
+    <div class="input-group">
+        <label>Red Cell Distribution Width (%)</label>
+        <input type="number" id="rdw" value="13.0" step="0.1">
+    </div>
+
+    <div class="input-group">
+        <label>Anion Gap (mEq/L)</label>
+        <input type="number" id="anio" value="12" step="0.1">
+    </div>
+
+    <div class="checkbox-group">
+        <input type="checkbox" id="sepsis" style="width: 20px; height: 20px;">
+        <label for="sepsis">Presence of Sepsis</label>
+    </div>
+
+    <button onclick="calculateRisk()">Calculate Risk</button>
+
+    <div id="result-container">
+        <span class="risk-label">Predicted 28-Day Mortality Risk</span>
+        <span id="risk-display" class="risk-value">0.0%</span>
+        <div id="risk-level" style="margin-top: 10px; font-weight: bold;"></div>
+    </div>
+
+    <div class="footer-note">
+        * This tool is based on a Cox Proportional Hazards Model.<br>
+        Baseline Survival $S_0(28) = 0.6333$.<br>
+        For research use only. Not a substitute for clinical judgment.
+    </div>
+</div>
+
+<script>
+    function calculateRisk() {
+        // 1. 获取输入值
+        const gcs = parseFloat(document.getElementById('gcs').value) || 0;
+        const age = parseFloat(document.getElementById('age').value) || 0;
+        const map = parseFloat(document.getElementById('map').value) || 0;
+        const inr = parseFloat(document.getElementById('inr').value) || 0;
+        const tb = parseFloat(document.getElementById('tb').value) || 0;
+        const res = parseFloat(document.getElementById('res').value) || 0;
+        const rdw = parseFloat(document.getElementById('rdw').value) || 0;
+        const anio = parseFloat(document.getElementById('anio').value) || 0;
+        const sepsis = document.getElementById('sepsis').checked ? 1 : 0;
+
+        // 2. 计算 Linear Predictor (LP) - 基于你的 Beta 系数
+        let lp = (-0.1304 * gcs) + 
+                 (0.0300 * age) + 
+                 (-0.0376 * map) + 
+                 (0.2116 * inr) + 
+                 (0.0247 * tb) + 
+                 (0.0518 * res) + 
+                 (0.1570 * rdw) + 
+                 (0.0373 * anio) + 
+                 (0.3354 * sepsis);
+
+        // 3. 计算死亡概率 (1 - S0^exp(LP))
+        const s0 = 0.6333;
+        const survivalProb = Math.pow(s0, Math.exp(lp));
+        const deathRisk = (1 - survivalProb) * 100;
+
+        // 4. 显示结果
+        const resultContainer = document.getElementById('result-container');
+        const riskDisplay = document.getElementById('risk-display');
+        const riskLevel = document.getElementById('risk-level');
+        
+        resultContainer.style.display = 'block';
+        riskDisplay.innerText = deathRisk.toFixed(1) + "%";
+
+        // 5. 颜色反馈逻辑
+        if (deathRisk < 30) {
+            resultContainer.style.backgroundColor = '#e8f5e9';
+            riskDisplay.style.color = '#27ae60';
+            riskLevel.innerText = "LOW RISK";
+            riskLevel.style.color = '#27ae60';
+        } else if (deathRisk < 60) {
+            resultContainer.style.backgroundColor = '#fff3e0';
+            riskDisplay.style.color = '#f39c12';
+            riskLevel.innerText = "MODERATE RISK";
+            riskLevel.style.color = '#f39c12';
+        } else {
+            resultContainer.style.backgroundColor = '#ffebee';
+            riskDisplay.style.color = '#e74c3c';
+            riskLevel.innerText = "HIGH RISK";
+            riskLevel.style.color = '#e74c3c';
+        }
+
+        // 平滑滚动到结果
+        resultContainer.scrollIntoView({ behavior: 'smooth' });
+    }
+</script>
+
+</body>
+</html>
